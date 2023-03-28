@@ -1,0 +1,76 @@
+{{- define "structReplacer" }}
+  {{- $valueType := (kindOf .parsingValue)}}
+  {{- $currentValue := .currentValue}}
+  {{- $parentValue := .parentValue}}
+  {{- $cluster := .cluster}}
+
+  {{- if eq $valueType "slice" }}
+    {{- range $k, $v := .parsingValue }}
+      {{- $val :=  (dict 
+        "parsingValue" $v 
+        "currentValue" (
+          dict
+            "key" ""
+            "offset" (add 2 $currentValue.offset | int)
+        )
+        "parentValue" (
+          dict
+            "key" $currentValue.key
+            "offset" $currentValue.offset
+            "type" "slice"
+        ) 
+        "cluster" $cluster
+      ) 
+      -}}
+    
+      {{- include "structReplacer" $val -}}
+    {{- end }}
+  {{- end }}
+
+  {{- if eq $valueType "map" }}
+    {{- $offset := $currentValue.offset -}}
+    {{- $count := 0 -}}
+
+    {{- range $k, $v := .parsingValue }}
+      {{- if and (eq (print $count) "0") (eq $parentValue.type "slice")}}
+        {{- $k = cat "-" $k -}}
+      {{- else }}
+        {{- $k = $k -}}
+        {{- $offset = (add 2 $currentValue.offset | int) -}}
+      {{- end }}
+
+      {{- if not (eq (kindOf $v) "string") }}
+        {{- $k | nindent $offset -}}:
+      {{- end }}
+
+      {{- $val := (dict 
+          "parsingValue" $v 
+          "currentValue" (
+            dict
+              "key" $k
+              "offset" $offset
+          )
+          "parentValue" (
+            dict
+              "key" $currentValue.key
+              "offset" $currentValue.offset
+              "type" "map"
+          ) 
+          "cluster" $cluster
+        ) 
+      -}}
+
+      {{- include "structReplacer" $val -}}
+  
+      {{- $count = (add 1 $count | int) -}}
+    {{- end }}
+  {{- end }}
+
+  {{- if eq $valueType "string"}}
+    {{- if and (eq $currentValue.key "cluster") (eq $parentValue.key "labels")}}
+      {{- $currentValue.key | nindent $currentValue.offset -}}: {{$cluster}}
+    {{- else }}
+      {{- $currentValue.key  | nindent $currentValue.offset -}}: {{.parsingValue}}
+    {{- end }}
+  {{- end }}
+{{- end }}
